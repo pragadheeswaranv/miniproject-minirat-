@@ -1,0 +1,94 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define VOLTAGE_PIN 34
+
+// Adjust if needed after calibration
+float voltageDividerRatio = 5.0;
+
+// Battery range 1V - 4.2V
+float batteryMin = 1.0;
+float batteryMax = 4.2;
+
+void setup() {
+  Serial.begin(115200);
+
+  analogReadResolution(12);           // 12-bit ADC (0–4095)
+  analogSetAttenuation(ADC_11db);     // Allows reading up to ~3.3V
+
+  Wire.begin(21, 22);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED not detected");
+    while (1);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Wind Energy Monitor");
+  display.display();
+  delay(2000);
+}
+
+float readVoltage() {
+  long sum = 0;
+  for (int i = 0; i < 20; i++) {
+    sum += analogRead(VOLTAGE_PIN);
+    delay(5);
+  }
+  float avgADC = sum / 20.0;
+  float adcVoltage = (avgADC / 4095.0) * 3.3;
+  float realVoltage = adcVoltage * voltageDividerRatio;
+  return realVoltage;
+}
+
+void loop() {
+  float batteryVoltage = readVoltage();
+
+  // Estimated current (ONLY estimation!)
+  float estimatedCurrent = batteryVoltage / 100.0; // Assume 100Ω load
+
+  // Battery percentage (1V - 4.2V range)
+  float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
+
+  // Clamp between 0% and 100%
+  if (batteryPercent > 100) batteryPercent = 100;
+  if (batteryPercent < 0) batteryPercent = 0;
+
+  // Serial Output
+  Serial.print("Voltage: ");
+  Serial.print(batteryVoltage, 2);
+  Serial.print(" V | Current(est): ");
+  Serial.print(estimatedCurrent, 3);
+  Serial.print(" A | Battery: ");
+  Serial.print(batteryPercent, 1);
+  Serial.println(" %");
+
+  // OLED Display
+  display.clearDisplay();
+  display.setCursor(0, 0);
+
+  display.print("V: ");
+  display.print(batteryVoltage, 2);
+  display.println(" V");
+
+  display.print("I: ");
+  display.print(estimatedCurrent, 3);
+  display.println(" A");
+
+  display.print("Bat: ");
+  display.print(batteryPercent, 1);
+  display.println(" %");
+
+  display.display();
+  delay(1000);
+}
